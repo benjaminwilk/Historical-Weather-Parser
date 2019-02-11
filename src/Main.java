@@ -1,116 +1,145 @@
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.*;
+import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
 import java.io.IOException;
-import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
-import java.util.Locale;
 import java.util.Scanner;
-
 
 public class Main {
 
     public static void main(String[] args) {
-
-        String zipValue;
-        String dateValue;
-
         System.out.println("Yeet test");
-        Main man = new Main();
-        zipValue = man.getZip();
-        dateValue = man.getDate();
-        man.airportParser(zipValue);
+        new WeatherData();
+    }
+}
 
+class WeatherData {
+    private String zipValue;
+    private String dateValue;
+    private String airportCode;
+
+    public WeatherData() {
+        this.zipValue = getZip();
+        this.dateValue = dateFormatter(getDate());
+       // System.out.println(this.dateValue);
+        this.airportCode = airportParser();
+       // System.out.println(this.airportCode);
+        System.out.println(weatherInfoMessage());
+        weatherParser();
     }
 
-    public String getZip(){
+    private String getZip() {
         System.out.print("Please enter your ZIP Code: ");
         Scanner readUserZIP = new Scanner(System.in);
-        String userZip = readUserZIP.nextLine();
-        return userZip;
+        return readUserZIP.nextLine();
     }
 
-    public String getDate(){
-        System.out.print("Enter the date you are looking for data: ");
+    private String getDate() {
+        System.out.print("Enter the date you are looking for data(MM/DD/YYYY): ");
         Scanner readUserDate = new Scanner(System.in);
-        String userDate = readUserDate.nextLine();
-        try {
-            SimpleDateFormat formatter = new SimpleDateFormat("yyyy/MM/dd");
+        return readUserDate.nextLine();
+    }
 
-            Date date = formatter.parse(userDate);
-            System.out.println(date);
-            System.out.println(formatter.format(date));
-        }catch(ParseException pe){
-            System.err.println(pe);
-            return "" + pe;
+    private String giveAirportURL() {
+        return "https://www.allplaces.us/afz.cgi?s=" + this.zipValue + "&rad=50";
+       // Document rawAirportData = downloadWebData(airportURL);
+        //return airportURL;
+    }
+
+    private String dateFormatter(String userDefinedDate){
+        Date date = new Date();
+        if(userDefinedDate.length() == 10){
+            SimpleDateFormat formatter = new SimpleDateFormat("MM/dd/yyyy");
+            try {
+                date = formatter.parse(userDefinedDate);
+            }catch(ParseException pe){
+                return "01/01/1991";
+            }
         }
-        return "You weren't supposed to get to the bottom of the get date function";
+        SimpleDateFormat urlFormatter = new SimpleDateFormat("yyyy/MM/dd");
+        return "" + urlFormatter.format(date);
     }
 
-    private Document getAirportWebData(String zipValue){
-        String airportURL = "https://www.allplaces.us/afz.cgi?s="+ zipValue + "&rad=50";
-        Document rawAirportData = downloadWebData(airportURL);
-        return rawAirportData;
-    }
-
-
-    public void airportParser(String zipValue){
-        Document airportData = getAirportWebData(zipValue);
+    private String airportParser() {
+        Document airportData = downloadWebData(giveAirportURL());
         //System.out.println(airportData); // Debug line that provides an output of the document text.
-        Elements elem = airportData.select("table");
+        Elements elem = airportData.select("tbody");
         Elements ids = elem.select("td.article");
+        Elements font = ids.select("font");
+        String rawAirportData = "" + font;
 
-        
+        ArrayList <String> parsedAirport = new ArrayList<String>(Arrays.asList(rawAirportData.split("\\r?\\n")));
+
+        String pat = "^([Kk])[A-Za-z]{3}$";
+
+        for (int p = 0; p < parsedAirport.size(); p++) {
+            parsedAirport.set(p, parsedAirport.get(p).replaceAll("<[^>]*>", "").trim());
+            //System.out.println("|" + parsedAirport[p] + "|");
+            if (parsedAirport.get(p).matches(pat)) {
+                return parsedAirport.get(p);
+            }
+        }
+        return "KLGA";
     }
 
-    private Document downloadWebData(String urlToDownload){
+    private String giveWeatherURL(){
+        //System.out.println("Weather Underground URL : https://api.wunderground.com/history/airport/" + this.airportCode + "/" + this.dateValue + "/DailyHistory.html?zip=" + this.zipValue);
+        return "https://api.wunderground.com/history/airport/" + this.airportCode + "/" + this.dateValue + "/DailyHistory.html?zip=" + this.zipValue;
+    }
+
+    private Document downloadWebData(String urlToDownload) {
         //System.out.println(urlToDownload); // Debugging statement to make sure that the string that is passed looks correct.
         try {
-            Document webWeatherData = Jsoup.connect(urlToDownload).get();
-            return webWeatherData;
-        }catch(IOException ioe){
+            return Jsoup.connect(urlToDownload).get();
+            //return webWeatherData;
+        } catch (IOException ioe) {
             String IOEerror = "" + ioe;
             System.err.println("Uh oh, something went wrong, IOException: " + ioe);
             return Jsoup.parse(IOEerror);
         }
     }
 
-    public void weatherParser(String zipValue, String dateValue){
-        String rawData = "";
-        String[] headerNames = new String[13];
-        String[] weatherUnits;
-        String[][] weatherValues = new String[24][500];
+    private String weatherInfoMessage(){
+        return "Weather Data for " + this.zipValue + " -- Date: " + this.dateValue + " -- Airport: " + this.airportCode;
+    }
+
+    private void weatherParser() {
+        ArrayList <String> headerNames = new ArrayList<String>();
         int iteration = 0;
 
-        String wUndergroundURL = "https://api.wunderground.com/history/airport/KDET/" + dateValue + "/DailyHistory.html?zip=" + zipValue;
-        Document rawWeatherData = downloadWebData(wUndergroundURL);
+        Document rawWeatherData = downloadWebData(giveWeatherURL());
         Elements elem = rawWeatherData.select("div#observations_details");
+        //System.out.println(elem);
         Elements wt = elem.select("th");
         Elements tm = elem.select("td");
-        rawData = "" + tm;
+        Elements columns = elem.select("tr.no-metars");
+        Elements headValues = elem.select("table.obs-table > thead > tr > th");
 
-        weatherUnits = rawData.split("\\r?\\n");
+        String[][] weatherValues = new String[columns.size()][headValues.size()];
 
-        for(int p = 0; p < weatherUnits.length; p++){
-            weatherUnits[p] = weatherUnits[p].replaceAll("\\<[^>]*>", "").replaceAll("&nbsp;", " ").trim();
+
+        String rawData = "" + tm;
+        ArrayList <String> weatherUnits = new ArrayList<String>(Arrays.asList(rawData.split("\\r?\\n")));
+
+        for (int p = 0; p < weatherUnits.size(); p++) {
+            weatherUnits.set(p, weatherUnits.get(p).replaceAll("\\<[^>]*>", "").replaceAll("&nbsp;", " ").trim());
             //System.out.println(weatherUnits[p]);
         }
 
-        for(int r = 0; r < wt.size(); r++){
-            headerNames[r] = "" + wt.eq(r);
-            headerNames[r] = headerNames[r].replaceAll("\\<[^>]*>","");
-            System.out.print(headerNames[r] + " | ");
+        for (int r = 0; r < wt.size(); r++) {
+            headerNames.add("" + wt.eq(r));
+            headerNames.set(r, headerNames.get(r).replaceAll("\\<[^>]*>", ""));
+            System.out.print(headerNames.get(r) + " | ");
         }
         System.out.println();
 
-        for(int z = 0; z < 24; z++) {
-            for (int r = 0; r < 13; r++) { //
-                weatherValues[z][r] = "" + weatherUnits[iteration];
+        for (int z = 0; z < columns.size(); z++) {
+            for (int r = 0; r < headValues.size(); r++) { //
+                weatherValues[z][r] = "" + weatherUnits.get(iteration);
                 weatherValues[z][r] = weatherValues[z][r].replaceAll("\\<[^>]*>", "").replaceAll("&nbsp;", " ").replaceAll("&amp;bsp;", "").trim();
                 System.out.print(spaceDisplay(weatherValues[z][r], r) + weatherValues[z][r] + spaceDisplay(weatherValues[z][r], r) + "|");
                 iteration++;
@@ -120,91 +149,15 @@ public class Main {
 
     }
 
-
- /*   public void dataGrabber(){
-        String[] headerNames = new String[13];
-        String rawData = "";
-        String[] weatherUnits;
-        String[][] weatherValues = new String[24][500];
-
-        int iteration = 0;
-
-
-      //  System.out.println("https://api.wunderground.com/history/airport/KDET/" + dateValue + "/DailyHistory.html?zip=" + zipValue);
-        try {
-         //   Document webWeatherData = Jsoup.connect("https://api.wunderground.com/history/airport/KDET/" + dateValue + "/DailyHistory.html?zip=" + zipValue).get();
-            //System.out.println(doc);
-           // Elements elem = webWeatherData.select("div#observations_details");
-            //Elements wt = elem.select("th");
-            //Elements tm = elem.select("td");
-            //System.out.println(tm);
-
-      //      rawData = "" + tm;
-           // System.out.println(rawData);
-            weatherUnits = rawData.split("\\r?\\n");
-
-            for(int p = 0; p < weatherUnits.length; p++){
-                weatherUnits[p] = weatherUnits[p].replaceAll("\\<[^>]*>", "").replaceAll("&nbsp;", " ").trim();
-                //System.out.println(weatherUnits[p]);
-            }
-
-            for(int r = 0; r < wt.size(); r++){
-                headerNames[r] = "" + wt.eq(r);
-                headerNames[r] = headerNames[r].replaceAll("\\<[^>]*>","");
-                System.out.print(headerNames[r] + " | ");
-            }
-            System.out.println();
-
-            for(int z = 0; z < 24; z++) {
-                for (int r = 0; r < 13; r++) { //
-                    weatherValues[z][r] = "" + weatherUnits[iteration];
-                    weatherValues[z][r] = weatherValues[z][r].replaceAll("\\<[^>]*>", "").replaceAll("&nbsp;", " ").replaceAll("&amp;bsp;", "").trim();
-                    System.out.print(spaceDisplay(weatherValues[z][r], r) + weatherValues[z][r] + spaceDisplay(weatherValues[z][r], r) + "|");
-                    iteration++;
-                }
-                System.out.println("\n --");
-            }
-
-       /*     for(int r = 0; r < wt.size(); r++){
-                weatherTitles[r] = "" + wt.eq(r);
-                weatherTitles[r] = weatherTitles[r].replaceAll("\\<[^>]*>","");
-                System.out.print(weatherTitles[r] + " | ");
-            }
-            System.out.println();
-            for(int z = 0; z < 24; z++) {
-                for (int i = 0; i < weatherTitles.length; i++) {
-                    weatherValues[z][i] = "" + wv.eq(i);
-                    weatherValues[z][i] = weatherValues[z][i].replaceAll("\\<[^>]*>","");
-                    //System.out.print(weatherValues[z][i] + " | ");
-                    //System.out.println("Z Value " + z + " I Value " + i  + weatherValues[z][i]);
-                }
-                System.out.println("\n -- \n");
-            }
-            /*JSONObject jsonObj = new JSONObject();
-            JSONArray jsonArr = new JSONArray();
-            Elements ttls = elem.getElementsByClass("ttl");
-            JSONObject jo = new JSONObject();
-            for (int i = 0, l = ttls.size(); i < l; i++) {
-                String key = ttls.get(i).text();
-                String value = nfos.get(i).text();
-                jo.put(key, value);
-            }
-
-        }catch(IOException ioe){
-            System.err.println("Uh oh, something went wrong, IOException: " + ioe);
-        }
-
-    }*/
-
-    public String spaceDisplay(String text, int state){
+    private StringBuilder spaceDisplay(String text, int state) {
         //Time (EST) | Temp. | Windchill | Dew Point | Humidity | Pressure | Visibility | Wind Dir | Wind Speed | Gust Speed | Precip | Events | Conditions |
-        int sizeAllocation[] = {12, 7, 11, 12, 11, 10, 12, 10, 12, 12, 9, 8, 12};
-        int spaceCount = (sizeAllocation[state] - text.length())/2;
-        String spaceAppend = "";
-       for(int u = 0; u < spaceCount; u++) {
-           spaceAppend += " ";
-       }
-       return spaceAppend;
+        ArrayList <Integer> sizeAllocation = new ArrayList<>(Arrays.asList(12, 7, 11, 12, 11, 10, 12, 10, 12, 12, 9, 8, 12));
+        int spaceCount = (sizeAllocation.get(state) - text.length()) / 2;
+        StringBuilder spaceAppend = new StringBuilder();
+        for (int u = 0; u < spaceCount; u++) {
+            spaceAppend.append(" ");
+        }
+        return spaceAppend;
     }
 
 }
